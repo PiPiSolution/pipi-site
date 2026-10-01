@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>PiPi. Туалеты Москвы (прототип)</title>
+<link rel="icon" type="image/png" href="logo.png" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, Arial, sans-serif; overflow: hidden; overscroll-behavior: none; }
+  #map { position: fixed; top: 64px; bottom: 0; left: 0; right: 0; }
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 800;
+    height: 64px; display: flex; align-items: center; gap: 10px;
+    padding: 0 14px; background: #1f2937; color: #fff; box-sizing: border-box;
+    overflow-x: auto; white-space: nowrap;
+  }
+  #topbar h1 { font-size: 16px; margin: 0 10px 0 0; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+  #topbar .logo { height: 36px; width: auto; display: block; }
+  .filter-btn {
+    background: #374151; color: #fff; border: 1px solid #4b5563;
+    border-radius: 16px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    flex-shrink: 0;
+  }
+  .filter-btn.active { background: #2563eb; border-color: #2563eb; }
+  .filter-btn-free.active { background: #059669; border-color: #059669; }
+  .filter-btn-paid.active { background: #dc2626; border-color: #dc2626; }
+  #filters-btn {
+    background: #374151; color: #fff; border: 1px solid #4b5563;
+    border-radius: 16px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    flex-shrink: 0;
+  }
+  #filters-btn.has-active { background: #2563eb; border-color: #2563eb; }
+  #filters-panel {
+    position: fixed; top: 64px; left: 14px; z-index: 850;
+    background: #1f2937; border-radius: 10px; padding: 10px;
+    display: none; flex-direction: column; gap: 8px; width: 240px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+  }
+  #filters-panel.open { display: flex; }
+  #filters-panel .filter-btn { width: 100%; text-align: left; white-space: normal; }
+  #filters-panel .filters-close {
+    margin-top: 4px; background: transparent; color: #9ca3af; border: none;
+    font-size: 12px; cursor: pointer; text-align: center;
+  }
+  .pipi-balloon { min-width: 220px; max-width: 280px; max-height: 380px; overflow-y: auto; box-sizing: border-box; }
+  .pipi-balloon b { display: block; margin-bottom: 4px; }
+  .tag-yes { color: #059669; }
+  .tag-no { color: #dc2626; }
+  .tag-unknown { color: #6b7280; }
+  .tag-free { color: #059669; font-weight: bold; }
+  .tag-paid { color: #dc2626; font-weight: bold; }
+  #count { color: #9ca3af; font-size: 12px; margin-left: auto; flex-shrink: 0; }
+  #admin-area { flex-shrink: 0; }
+  .admin-toggle-btn {
+    background: #4b5563; color: #fff; border: 1px solid #6b7280;
+    border-radius: 16px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .admin-toggle-btn.preview-mode { background: #f59e0b; border-color: #f59e0b; color: #111; }
+  #add-toilet-btn {
+    background: #7c3aed; color: #fff; border: none; border-radius: 16px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer; flex-shrink: 0;
+  }
+  #add-toilet-btn.active { background: #dc2626; }
+  #place-hint {
+    position: fixed; top: 72px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 10px 16px; border-radius: 8px;
+    font-size: 13px; z-index: 900; display: flex; gap: 10px; align-items: center;
+  }
+  #place-hint button {
+    background: #374151; color: #fff; border: none; border-radius: 6px;
+    padding: 4px 10px; cursor: pointer; font-size: 12px;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center; z-index: 1000;
+  }
+  .modal-box {
+    background: #fff; border-radius: 10px; padding: 20px; width: 300px;
+    box-sizing: border-box; font-size: 14px;
+  }
+  .modal-box h2 { font-size: 16px; margin: 0 0 10px; }
+  .modal-box label { display: block; margin: 10px 0 4px; font-size: 13px; color: #374151; }
+  .modal-box input, .modal-box textarea, .modal-box select {
+    width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #d1d5db;
+    border-radius: 6px; font-size: 14px;
+  }
+  .modal-box .row { display: flex; gap: 8px; margin-top: 14px; }
+  .modal-box button {
+    flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-secondary { background: #e5e7eb; color: #111; }
+  .demo-note { background: #fef3c7; color: #92400e; padding: 8px; border-radius: 6px; font-size: 12px; margin-top: 10px; }
+
+  .review-form textarea { min-height: 50px; resize: vertical; }
+  .rf-label { display: block; font-size: 12px; color: #374151; margin-top: 8px; }
+  .rf-select, .review-form textarea { display: block; width: 100%; margin-top: 3px; box-sizing: border-box; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+  .rf-section-title { font-size: 12px; color: #6b7280; margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+  .review-item { border-top: 1px solid #e5e7eb; padding-top: 6px; margin-top: 6px; font-size: 13px; }
+  .reviews-list { max-height: 100px; overflow-y: auto; }
+  .review-item .stars { color: #f59e0b; }
+  .avg-rating { color: #f59e0b; font-weight: normal; }
+  .pending-badge { color: #d97706; font-size: 11px; }
+  .captcha-box { background: #f3f4f6; border-radius: 6px; padding: 8px; margin-top: 4px; font-size: 13px; }
+  .captcha-box input { width: 70px; display: inline-block; margin-left: 6px; padding: 4px; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; }
+
+  @media (max-width: 480px) {
+    #count { display: none; }
+    #topbar h1 span { display: none; }
+    #topbar { padding: 0 10px; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1><img class="logo" src="logo.png" alt="PiPi" /><span>Москва</span></h1>
+  <button id="add-toilet-btn">Добавить туалет</button>
+  <button id="filters-btn">Фильтры</button>
+  <span id="count"></span>
+  <span id="admin-area"></span>
+</div>
+<div id="filters-panel">
+  <button class="filter-btn filter-btn-free" data-filter="fee" data-value="no">Бесплатные</button>
+  <button class="filter-btn filter-btn-paid" data-filter="fee" data-value="yes">Платные</button>
+  <button class="filter-btn" data-filter="wheelchair" data-value="yes">Доступно для людей с инвалидностью</button>
+  <button class="filter-btn" data-filter="changing_table" data-value="yes">Пеленальный столик</button>
+  <button class="filters-close" id="filters-close">Закрыть</button>
+</div>
+<div id="map"></div>
+<div id="place-hint" style="display:none;">
+  Кликните на карте в месте, где находится туалет
+  <button id="place-cancel">Отмена</button>
+</div>
+
+<script src="config.js"></script>
+<script>
+// ВАЖНО про отзывы: это демо-версия без настоящего сервера и без входа.
+// Оставить отзыв или добавить туалет может любой человек без регистрации
+// (решение от 01.10.2026, см. 03_Data_Security.md). Вместо входа: капча-заглушка
+// (простой пример с числами, в реальной версии будет настоящая капча, например
+// Яндекс SmartCaptcha) и анонимный ID устройства, который живёт только в этом
+// браузере и нужен для одной вещи: чтобы человек мог найти и обновить свой же
+// отзыв на этот туалет, не заводя аккаунт. Этот ID никуда не передаётся и не
+// виден другим людям. Все отзывы помечаются «на модерации», в реальной версии
+// это будет значить, что другие люди их не увидят, пока их не одобрит админ.
+
+function getDeviceId() {
+  let id = localStorage.getItem('pipi_device_id');
+  if (!id) {
+    id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('pipi_device_id', id);
+  }
+  return id;
+}
+
+let map;
+const activeFilters = {};
+let allToilets = [];
+let markers = [];
+let placingMode = false;
+
+function labelYesNo(v) {
+  if (v === 'yes') return '<span class="tag-yes">да</span>';
+  if (v === 'no') return '<span class="tag-no">нет</span>';
+  return '<span class="tag-unknown">не указано</span>';
+}
+// Платность красим наоборот: бесплатный, это хорошо (зелёный), платный — красным.
+function labelFee(v) {
+  if (v === 'no') return '<span class="tag-free">бесплатный</span>';
+  if (v === 'yes') return '<span class="tag-paid">платный</span>';
+  return '<span class="tag-unknown">не указано</span>';
+}
+
+// ---------- Роли: администратор и обычный пользователь ----------
+// Логин и пароль администратора проверяются по-настоящему на сервере (серверная
+// функция netlify/functions/admin-login.js), а не в этом файле, поэтому здесь
+// их нигде нет, и в просмотре кода страницы их не видно. Токен, который сервер
+// выдаёт после успешного входа, подписан секретом, известным только серверу,
+// подделать его, не зная секрет, нельзя. Сами действия модерации (одобрить/
+// отклонить) пока всё ещё только в этом браузере, потому что общей базы данных
+// на сервере ещё нет, это будет на следующем этапе (см. 01_Roadmap).
+function isAdmin() {
+  const token = localStorage.getItem('pipi_admin_token');
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[0]));
+    return payload.exp > Date.now();
+  } catch (e) { return false; }
+}
+function setAdminToken(token) { localStorage.setItem('pipi_admin_token', token); }
+function clearAdminToken() { localStorage.removeItem('pipi_admin_token'); }
+function isPreviewAsUser() { return localStorage.getItem('pipi_preview_as_user') === 'true'; }
+function setPreviewAsUser(v) { if (v) localStorage.setItem('pipi_preview_as_user', 'true'); else localStorage.removeItem('pipi_preview_as_user'); }
+// Админ в обычном режиме видит все отзывы (включая отправленные на модерацию).
+// Обычный пользователь и админ в режиме предпросмотра видят только одобренные,
+// это и есть наглядная разница между «на модерации» и «опубликовано».
+function isPublicView() { return !isAdmin() || isPreviewAsUser(); }
+
+// ---------- Отзывы (демо, хранятся только в этом браузере) ----------
+function getReviews(toiletId) {
+  try { return JSON.parse(localStorage.getItem('pipi_reviews_' + toiletId)) || []; } catch (e) { return []; }
+}
+function getMyReview(toiletId) {
+  const deviceId = getDeviceId();
+  return getReviews(toiletId).find(r => r.deviceId === deviceId) || null;
+}
+function upsertReview(toiletId, review) {
+  const reviews = getReviews(toiletId);
+  const idx = reviews.findIndex(r => r.deviceId === review.deviceId);
+  if (idx !== -1) reviews[idx] = review; else reviews.push(review);
+  localStorage.setItem('pipi_reviews_' + toiletId, JSON.stringify(reviews));
+}
+function getOverrides(toiletId) {
+  try { return JSON.parse(localStorage.getItem('pipi_overrides_' + toiletId)) || {}; } catch (e) { return {}; }
+}
+function saveOverrides(toiletId, updates) {
+  const o = getOverrides(toiletId);
+  Object.assign(o, updates);
+  localStorage.setItem('pipi_overrides_' + toiletId, JSON.stringify(o));
+  return o;
+}
+function applyOverrides(t) {
+  return Object.assign({}, t, getOverrides(t.id));
+}
+// То, что видно в карточке туалета: обычному пользователю и админу в режиме
+// предпросмотра показываем только одобренные отзывы, самому админу — все.
+function getVisibleReviews(toiletId) {
+  const all = getReviews(toiletId);
+  if (isPublicView()) return all.filter(r => r.status === 'approved');
+  return all;
+}
+
+function avgRating(reviews) {
+  const rated = reviews.filter(r => r.rating !== 'unknown');
+  if (!rated.length) return null;
+  const sum = rated.reduce((s, r) => s + Number(r.rating), 0);
+  return { value: (sum / rated.length).toFixed(1), count: rated.length };
+}
+function starsText(n) {
+  const rounded = Math.round(n);
+  return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+}
+function reviewWord(n) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'отзыв';
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'отзыва';
+  return 'отзывов';
+}
+
+function reviewsHtml(toiletId) {
+  const reviews = getVisibleReviews(toiletId);
+  if (!reviews.length) return '';
+  return reviews.map(r => {
+    let badge = '';
+    if (r.status === 'pending') badge = ' <span class="pending-badge">(на модерации)</span>';
+    if (r.status === 'rejected') badge = ' <span class="pending-badge" style="color:#dc2626;">(отклонено)</span>';
+    return `
+    <div class="review-item">
+      <span class="stars">${r.rating === 'unknown' ? 'оценка не указана' : starsText(r.rating)}</span> Бумага: ${r.paper === 'yes' ? 'есть' : r.paper === 'no' ? 'нет' : 'не указано автором отзыва'}${badge}
+      ${r.comment ? '<br/>' + r.comment : ''}
+    </div>
+  `;
+  }).join('');
+}
+
+function opt(value, label, current) {
+  return `<option value="${value}" ${value === current ? 'selected' : ''}>${label}</option>`;
+}
+
+function reviewFormHtml(toiletId) {
+  const existing = getMyReview(toiletId);
+  const rating = existing ? existing.rating : 'unknown';
+  const paper = existing ? existing.paper : 'unknown';
+  const comment = existing ? existing.comment : '';
+  const a = Math.floor(Math.random() * 8) + 1;
+  const b = Math.floor(Math.random() * 8) + 1;
+  return `
+    <div class="review-form" style="margin-top:8px;">
+      ${existing ? `<div class="demo-note">С этого устройства уже есть отзыв на этот туалет (статус: ${existing.status === 'pending' ? 'на модерации' : existing.status === 'approved' ? 'опубликован' : 'отклонён'}). Форма ниже обновит его, а не создаст новый.</div>` : ''}
+
+      <label class="rf-label">Ваша оценка</label>
+      <select class="rf-select rf-rating" data-id="${toiletId}">
+        ${opt('unknown', 'Не указывать', rating)}
+        ${opt('5', '5, чисто и комфортно', rating)}
+        ${opt('4', '4, чисто, но по мелочи есть к чему придраться', rating)}
+        ${opt('3', '3, не грязно, но и некомфортно', rating)}
+        ${opt('2', '2, грязно или неприятный запах', rating)}
+        ${opt('1', '1, очень грязно находиться неприятно', rating)}
+      </select>
+
+      <label class="rf-label">Бумага была?</label>
+      <select class="rf-select rf-paper" data-id="${toiletId}">
+        ${opt('unknown', 'Не указывать', paper)}
+        ${opt('yes', 'Да', paper)}
+        ${opt('no', 'Нет', paper)}
+      </select>
+
+      <label class="rf-label">Комментарий (опционально)</label>
+      <textarea class="rf-comment" data-id="${toiletId}" placeholder="Например: чисто, но темно">${comment}</textarea>
+
+      <div class="rf-section-title">Уточнить о туалете (если не указано или указано неверно)</div>
+
+      <label class="rf-label">Платный?</label>
+      <select class="rf-select rf-fee" data-id="${toiletId}">
+        <option value="nochange">Не менять</option>
+        <option value="yes">Платный</option>
+        <option value="no">Бесплатный</option>
+      </select>
+
+      <label class="rf-label">Доступно для людей с инвалидностью?</label>
+      <select class="rf-select rf-wheelchair" data-id="${toiletId}">
+        <option value="nochange">Не менять</option>
+        <option value="yes">Да</option>
+        <option value="no">Нет</option>
+      </select>
+
+      <label class="rf-label">Есть пеленальный столик?</label>
+      <select class="rf-select rf-changing" data-id="${toiletId}">
+        <option value="nochange">Не менять</option>
+        <option value="yes">Да</option>
+        <option value="no">Нет</option>
+      </select>
+
+      <div class="rf-section-title">Проверка, что вы не робот (демо-капча)</div>
+      <div class="captcha-box" data-a="${a}" data-b="${b}">
+        Сколько будет ${a} + ${b}?
+        <input type="text" class="rf-captcha" inputmode="numeric" placeholder="Ответ" />
+      </div>
+
+      <button class="rf-submit" data-id="${toiletId}" style="width:100%; margin-top:12px; padding:8px; background:#059669; color:#fff; border:none; border-radius:6px; cursor:pointer;">${existing ? 'Обновить мой отзыв' : 'Отправить отзыв'}</button>
+    </div>
+  `;
+}
+
+function popupHtml(t) {
+  const title = t.name ? t.name : 'Туалет';
+  const reviews = getVisibleReviews(t.id);
+  const avg = avgRating(reviews);
+  let avgLine;
+  if (avg) {
+    avgLine = `<span class="avg-rating">${starsText(avg.value)} ${avg.value} из 5</span> (${avg.count} ${reviewWord(avg.count)} с оценкой)`;
+  } else if (reviews.length) {
+    avgLine = `<span style="color:#9ca3af;">оценок пока нет (${reviews.length} ${reviewWord(reviews.length)} без оценки)</span>`;
+  } else {
+    avgLine = '<span style="color:#9ca3af;">пока отзывов не было</span>';
+  }
+  return `
+    <div class="pipi-balloon">
+    <b>${title}</b>
+    Платный: ${labelFee(t.fee)}<br/>
+    Доступно для людей с инвалидностью: ${labelYesNo(t.wheelchair)}<br/>
+    Пеленальный столик: ${labelYesNo(t.changing_table)}<br/>
+    ${t.opening_hours ? 'Часы работы: ' + t.opening_hours + '<br/>' : ''}
+    <small style="color:#9ca3af">${t.source === 'user' ? 'Добавлено через сайт (демо, в реальной версии ждало бы модерации)' : 'Данные о туалете: OpenStreetMap'}</small>
+
+    <div style="margin-top:10px; font-weight:bold; font-size:13px;">Средняя оценка посещений</div>
+    <div style="margin-top:2px;">${avgLine}</div>
+    <div class="reviews-list">${reviewsHtml(t.id)}</div>
+
+    ${reviewFormHtml(t.id)}
+    </div>
+  `;
+}
+
+// Делегирование кликов внутри балунов (они пересоздаются каждый раз, поэтому вешаем один обработчик на документ)
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('rf-submit')) {
+    const id = e.target.dataset.id;
+    const container = e.target.closest('.pipi-balloon');
+    const rating = container.querySelector('.rf-rating').value;
+    const paper = container.querySelector('.rf-paper').value;
+    const comment = container.querySelector('.rf-comment').value.trim();
+    const feeUpdate = container.querySelector('.rf-fee').value;
+    const wheelchairUpdate = container.querySelector('.rf-wheelchair').value;
+    const changingUpdate = container.querySelector('.rf-changing').value;
+
+    const captchaBox = container.querySelector('.captcha-box');
+    const expected = Number(captchaBox.dataset.a) + Number(captchaBox.dataset.b);
+    const answer = Number(container.querySelector('.rf-captcha').value.trim());
+    if (answer !== expected) { alert('Неверный ответ на проверку «не робот», попробуйте ещё раз.'); return; }
+
+    upsertReview(id, {
+      deviceId: getDeviceId(),
+      rating, paper, comment,
+      status: 'pending',
+      date: new Date().toISOString()
+    });
+
+    const updates = {};
+    if (feeUpdate !== 'nochange') updates.fee = feeUpdate;
+    if (wheelchairUpdate !== 'nochange') updates.wheelchair = wheelchairUpdate;
+    if (changingUpdate !== 'nochange') updates.changing_table = changingUpdate;
+    if (Object.keys(updates).length) {
+      saveOverrides(id, updates);
+      const idx = allToilets.findIndex(t => String(t.id) === String(id));
+      if (idx !== -1) Object.assign(allToilets[idx], updates);
+    }
+
+    render();
+    const newMarker = markers.find(m => String(m._toiletId) === String(id));
+    if (newMarker) newMarker.balloon.open();
+  }
+});
+
+// ---------- Панель администратора (демо) ----------
+function toiletLabel(toiletId) {
+  const t = allToilets.find(x => String(x.id) === String(toiletId));
+  if (t && t.name) return t.name;
+  if (t) return `Туалет без названия (${t.lat.toFixed(4)}, ${t.lon.toFixed(4)})`;
+  return 'Туалет #' + toiletId;
+}
+
+// Отзывы лежат в отдельном ключе localStorage на каждый туалет, поэтому для общей
+// очереди модерации нужно пройтись по всем ключам и собрать те, что ждут решения.
+function getAllPendingReviews() {
+  const result = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.indexOf('pipi_reviews_') === 0) {
+      const toiletId = key.slice('pipi_reviews_'.length);
+      let reviews = [];
+      try { reviews = JSON.parse(localStorage.getItem(key)) || []; } catch (e) {}
+      reviews.forEach(r => {
+        if (r.status === 'pending') result.push({ toiletId, review: r });
+      });
+    }
+  }
+  return result;
+}
+
+function setReviewStatus(toiletId, deviceId, status) {
+  const key = 'pipi_reviews_' + toiletId;
+  let reviews = [];
+  try { reviews = JSON.parse(localStorage.getItem(key)) || []; } catch (e) {}
+  const idx = reviews.findIndex(r => r.deviceId === deviceId);
+  if (idx !== -1) {
+    reviews[idx].status = status;
+    localStorage.setItem(key, JSON.stringify(reviews));
+  }
+}
+
+function renderAdminArea() {
+  const area = document.getElementById('admin-area');
+  if (!isAdmin()) {
+    area.innerHTML = `<button id="admin-area-btn" class="admin-toggle-btn">Я администратор</button>`;
+    document.getElementById('admin-area-btn').addEventListener('click', openAdminLoginModal);
+    return;
+  }
+  if (isPreviewAsUser()) {
+    area.innerHTML = `<button id="admin-area-btn" class="admin-toggle-btn preview-mode">Режим пользователя (клик — назад в админку)</button>`;
+  } else {
+    const n = getAllPendingReviews().length;
+    area.innerHTML = `<button id="admin-area-btn" class="admin-toggle-btn">Админ${n ? ' (' + n + ')' : ''}</button>`;
+  }
+  document.getElementById('admin-area-btn').addEventListener('click', openAdminPanel);
+}
+
+function openAdminLoginModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h2>Вход для администратора</h2>
+      <label>Логин</label>
+      <input id="admin-username" type="text" autocomplete="username" />
+      <label>Пароль</label>
+      <input id="admin-password" type="password" autocomplete="current-password" />
+      <div id="admin-login-error" style="color:#dc2626; font-size:12px; margin-top:6px;"></div>
+      <div class="row">
+        <button class="btn-secondary" id="admin-login-cancel">Отмена</button>
+        <button class="btn-primary" id="admin-login-submit">Войти</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('admin-login-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('admin-login-submit').addEventListener('click', async () => {
+    const username = document.getElementById('admin-username').value.trim();
+    const password = document.getElementById('admin-password').value;
+    const errorBox = document.getElementById('admin-login-error');
+    const submitBtn = document.getElementById('admin-login-submit');
+    errorBox.textContent = '';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Проверяю...';
+    try {
+      const resp = await fetch('/.netlify/functions/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        errorBox.textContent = data.error || 'Не удалось войти';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Войти';
+        return;
+      }
+      setAdminToken(data.token);
+      setPreviewAsUser(false);
+      overlay.remove();
+      renderAdminArea();
+      if (map) render();
+    } catch (e) {
+      errorBox.textContent = 'Не удалось связаться с сервером. Проверьте интернет-соединение.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Войти';
+    }
+  });
+}
+
+function openAdminPanel() {
+  if (isPreviewAsUser()) {
+    setPreviewAsUser(false);
+    renderAdminArea();
+    if (map) render();
+    return;
+  }
+  const pending = getAllPendingReviews();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" style="width:360px; max-height:80vh; overflow-y:auto;">
+      <h2>Панель администратора (демо)</h2>
+      <div class="demo-note">Видно и доступно только тебе. В реальной версии это отдельная защищённая страница на сервере, а не часть обычного сайта.</div>
+      <label class="rf-label" style="margin-top:14px;">Очередь на модерацию (${pending.length})</label>
+      <div id="admin-pending-list">
+        ${pending.length ? pending.map(p => `
+          <div class="review-item" data-toilet="${p.toiletId}" data-device="${p.review.deviceId}">
+            <b>${toiletLabel(p.toiletId)}</b><br/>
+            ${p.review.rating === 'unknown' ? 'оценка не указана' : starsText(p.review.rating)}, бумага: ${p.review.paper === 'yes' ? 'есть' : p.review.paper === 'no' ? 'нет' : 'не указано'}
+            ${p.review.comment ? '<br/>«' + p.review.comment + '»' : ''}
+            <div class="row" style="margin-top:6px;">
+              <button class="btn-primary admin-approve-btn">Одобрить</button>
+              <button class="btn-secondary admin-reject-btn">Отклонить</button>
+            </div>
+          </div>
+        `).join('') : '<div style="color:#9ca3af; font-size:13px;">Очередь пуста</div>'}
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <button class="btn-secondary" id="admin-preview-btn">Смотреть как пользователь</button>
+        <button class="btn-secondary" id="admin-logout-btn">Выйти из админки</button>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn-secondary" id="admin-close-btn" style="width:100%;">Закрыть</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelectorAll('.admin-approve-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const item = e.target.closest('.review-item');
+      setReviewStatus(item.dataset.toilet, item.dataset.device, 'approved');
+      overlay.remove();
+      renderAdminArea();
+      if (map) render();
+      openAdminPanel();
+    });
+  });
+  overlay.querySelectorAll('.admin-reject-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const item = e.target.closest('.review-item');
+      setReviewStatus(item.dataset.toilet, item.dataset.device, 'rejected');
+      overlay.remove();
+      renderAdminArea();
+      if (map) render();
+      openAdminPanel();
+    });
+  });
+  document.getElementById('admin-preview-btn').addEventListener('click', () => {
+    setPreviewAsUser(true);
+    overlay.remove();
+    renderAdminArea();
+    if (map) render();
+  });
+  document.getElementById('admin-logout-btn').addEventListener('click', () => {
+    clearAdminToken();
+    setPreviewAsUser(false);
+    overlay.remove();
+    renderAdminArea();
+    if (map) render();
+  });
+  document.getElementById('admin-close-btn').addEventListener('click', () => overlay.remove());
+}
+
+// ---------- Добавление туалета пользователем (демо, хранится только в этом браузере) ----------
+function getUserToilets() {
+  try { return JSON.parse(localStorage.getItem('pipi_user_toilets')) || []; } catch (e) { return []; }
+}
+function saveUserToilet(toilet) {
+  const list = getUserToilets();
+  list.push(toilet);
+  localStorage.setItem('pipi_user_toilets', JSON.stringify(list));
+}
+
+function togglePlacingMode() {
+  placingMode = !placingMode;
+  const btn = document.getElementById('add-toilet-btn');
+  const hint = document.getElementById('place-hint');
+  if (placingMode) {
+    btn.classList.add('active');
+    btn.textContent = 'Отменить добавление';
+    hint.style.display = 'flex';
+    document.getElementById('map').style.cursor = 'crosshair';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Добавить туалет';
+    hint.style.display = 'none';
+    document.getElementById('map').style.cursor = '';
+  }
+}
+
+function openNewToiletModal(coords) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h2>Новый туалет</h2>
+      <label>Название (необязательно)</label>
+      <input id="nt-name" type="text" placeholder="Например: у входа в парк" />
+      <label>Платный?</label>
+      <select id="nt-fee">
+        <option value="unknown">Не знаю</option>
+        <option value="no">Бесплатный</option>
+        <option value="yes">Платный</option>
+      </select>
+      <label>Доступно для людей с инвалидностью?</label>
+      <select id="nt-wheelchair">
+        <option value="unknown">Не знаю</option>
+        <option value="yes">Да</option>
+        <option value="no">Нет</option>
+      </select>
+      <label>Есть пеленальный столик?</label>
+      <select id="nt-changing">
+        <option value="unknown">Не знаю</option>
+        <option value="yes">Да</option>
+        <option value="no">Нет</option>
+      </select>
+      <div class="row">
+        <button class="btn-secondary" id="nt-cancel">Отмена</button>
+        <button class="btn-primary" id="nt-submit">Добавить на карту</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('nt-cancel').addEventListener('click', () => { overlay.remove(); togglePlacingMode(); });
+  document.getElementById('nt-submit').addEventListener('click', () => {
+    const toilet = {
+      id: 'user-' + Date.now(),
+      lat: coords[0],
+      lon: coords[1],
+      name: document.getElementById('nt-name').value.trim(),
+      fee: document.getElementById('nt-fee').value,
+      wheelchair: document.getElementById('nt-wheelchair').value,
+      changing_table: document.getElementById('nt-changing').value,
+      opening_hours: '',
+      source: 'user'
+    };
+    saveUserToilet(toilet);
+    allToilets.push(toilet);
+    render();
+    overlay.remove();
+    togglePlacingMode();
+  });
+}
+
+function passesFilters(t) {
+  for (const key in activeFilters) {
+    if (t[key] !== activeFilters[key]) return false;
+  }
+  return true;
+}
+
+function render() {
+  map.geoObjects.removeAll();
+  markers = [];
+  const visible = allToilets.filter(passesFilters);
+  visible.forEach(t => {
+    const preset = t.source === 'user' ? 'islands#violetIcon' : 'islands#blueIcon';
+    const marker = new ymaps.Placemark(
+      [t.lat, t.lon],
+      { balloonContent: popupHtml(t) },
+      { preset, balloonMaxWidth: 300, hideIconOnBalloonOpen: false }
+    );
+    marker._toiletId = t.id;
+    map.geoObjects.add(marker);
+    markers.push(marker);
+  });
+  document.getElementById('count').textContent = `Показано: ${visible.length} из ${allToilets.length}`;
+}
+
+function initMap() {
+  map = new ymaps.Map('map', {
+    center: [55.751, 37.618],
+    zoom: 10,
+    controls: ['zoomControl']
+  });
+
+  map.events.add('click', (e) => {
+    if (!placingMode) return;
+    openNewToiletModal(e.get('coords'));
+  });
+
+  document.getElementById('add-toilet-btn').addEventListener('click', togglePlacingMode);
+  document.getElementById('place-cancel').addEventListener('click', togglePlacingMode);
+
+  const filtersBtn = document.getElementById('filters-btn');
+  const filtersPanel = document.getElementById('filters-panel');
+  function updateFiltersBtnLabel() {
+    const n = Object.keys(activeFilters).length;
+    filtersBtn.textContent = n ? `Фильтры (${n})` : 'Фильтры';
+    filtersBtn.classList.toggle('has-active', n > 0);
+  }
+  filtersBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    filtersPanel.classList.toggle('open');
+  });
+  document.getElementById('filters-close').addEventListener('click', () => {
+    filtersPanel.classList.remove('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (filtersPanel.classList.contains('open') && !filtersPanel.contains(e.target) && e.target !== filtersBtn) {
+      filtersPanel.classList.remove('open');
+    }
+  });
+
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const filter = btn.dataset.filter;
+      const value = btn.dataset.value;
+      if (activeFilters[filter] === value) {
+        delete activeFilters[filter];
+        btn.classList.remove('active');
+      } else {
+        document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`).forEach(b => b.classList.remove('active'));
+        activeFilters[filter] = value;
+        btn.classList.add('active');
+      }
+      updateFiltersBtnLabel();
+      render();
+    });
+  });
+
+  renderAdminArea();
+
+  fetch('toilets_moscow.json')
+    .then(r => r.json())
+    .then(data => {
+      allToilets = data.concat(getUserToilets()).map(applyOverrides);
+      render();
+    })
+    .catch(err => {
+      document.getElementById('count').textContent = 'Не удалось загрузить данные о туалетах';
+      console.error(err);
+    });
+}
+
+(function loadYandexMaps() {
+  const script = document.createElement('script');
+  script.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(YANDEX_MAPS_API_KEY) + '&lang=ru_RU';
+  script.onload = () => ymaps.ready(initMap);
+  script.onerror = () => {
+    document.getElementById('map').innerHTML =
+      '<div style="padding:20px; font-family:sans-serif;">Не удалось загрузить Яндекс Карты. Проверьте интернет-соединение и ключ в config.js.</div>';
+  };
+  document.head.appendChild(script);
+})();
+</script>
+
+</body>
+</html>
