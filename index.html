@@ -376,23 +376,37 @@ document.addEventListener('click', (e) => {
     const wheelchairUpdate = container.querySelector('.rf-wheelchair').value;
     const changingUpdate = container.querySelector('.rf-changing').value;
 
+    const hasReviewContent = rating !== 'unknown' || paper !== 'unknown' || comment !== '';
+    const updates = {};
+    if (feeUpdate !== 'nochange') updates.fee = feeUpdate;
+    if (wheelchairUpdate !== 'nochange') updates.wheelchair = wheelchairUpdate;
+    if (changingUpdate !== 'nochange') updates.changing_table = changingUpdate;
+    const hasCorrections = Object.keys(updates).length > 0;
+
+    if (!hasReviewContent && !hasCorrections) {
+      alert('Форма пустая: не указана ни оценка, ни бумага, ни комментарий, ни уточнение о туалете. Нечего отправлять.');
+      return;
+    }
+
     const captchaBox = container.querySelector('.captcha-box');
     const expected = Number(captchaBox.dataset.a) + Number(captchaBox.dataset.b);
     const answer = Number(container.querySelector('.rf-captcha').value.trim());
     if (answer !== expected) { alert('Неверный ответ на проверку «не робот», попробуйте ещё раз.'); return; }
 
-    upsertReview(id, {
-      deviceId: getDeviceId(),
-      rating, paper, comment,
-      status: 'pending',
-      date: new Date().toISOString()
-    });
+    // Отзыв создаём, только если реально что-то указано (оценка, бумага или
+    // комментарий), а не при каждом нажатии кнопки. Иначе человек, который
+    // просто уточнил платность туалета, случайно «использовал» бы свой единственный
+    // отзыв на эту точку, ничего не написав по сути.
+    if (hasReviewContent) {
+      upsertReview(id, {
+        deviceId: getDeviceId(),
+        rating, paper, comment,
+        status: 'pending',
+        date: new Date().toISOString()
+      });
+    }
 
-    const updates = {};
-    if (feeUpdate !== 'nochange') updates.fee = feeUpdate;
-    if (wheelchairUpdate !== 'nochange') updates.wheelchair = wheelchairUpdate;
-    if (changingUpdate !== 'nochange') updates.changing_table = changingUpdate;
-    if (Object.keys(updates).length) {
+    if (hasCorrections) {
       saveOverrides(id, updates);
       const idx = allToilets.findIndex(t => String(t.id) === String(id));
       if (idx !== -1) Object.assign(allToilets[idx], updates);
