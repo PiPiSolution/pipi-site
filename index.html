@@ -677,7 +677,7 @@ function render() {
   map.geoObjects.removeAll();
   markers = [];
   const visible = allToilets.filter(passesFilters);
-  visible.forEach(t => {
+  const placemarks = visible.map(t => {
     const preset = t.source === 'user' ? 'islands#violetIcon' : 'islands#blueIcon';
     const marker = new ymaps.Placemark(
       [t.lat, t.lon],
@@ -685,9 +685,22 @@ function render() {
       { preset, balloonMaxWidth: 300, hideIconOnBalloonOpen: false }
     );
     marker._toiletId = t.id;
-    map.geoObjects.add(marker);
     markers.push(marker);
+    return marker;
   });
+
+  // Группировка близких туалетов в один кружок с цифрой, чтобы не накладывались
+  // друг на друга визуально и не было путаницы, по какой метке реально кликаешь.
+  // Если несколько туалетов настолько близко, что не разъезжаются даже на
+  // максимальном зуме, клик по кружку покажет список, из которого можно выбрать
+  // нужный, а не откроет случайный.
+  const clusterer = new ymaps.Clusterer({
+    preset: 'islands#invertedBlueClusterIcons',
+    groupByCoordinates: false,
+    clusterDisableClickZoom: false
+  });
+  clusterer.add(placemarks);
+  map.geoObjects.add(clusterer);
   document.getElementById('count').textContent = `Показано: ${visible.length} из ${allToilets.length}`;
 }
 
