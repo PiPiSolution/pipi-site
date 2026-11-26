@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>PiPi. Туалеты Москвы (прототип)</title>
 <link rel="icon" type="image/png" href="logo.png" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
   html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, Arial, sans-serif; overflow: hidden; overscroll-behavior: none; }
   #map { position: fixed; top: 64px; bottom: 0; left: 0; right: 0; }
@@ -42,7 +45,7 @@
     margin-top: 4px; background: transparent; color: #9ca3af; border: none;
     font-size: 12px; cursor: pointer; text-align: center;
   }
-  .pipi-balloon { min-width: 220px; max-width: 280px; max-height: 380px; overflow-y: auto; box-sizing: border-box; }
+  .pipi-balloon { min-width: 220px; }
   .pipi-balloon b { display: block; margin-bottom: 4px; }
   .tag-yes { color: #059669; }
   .tag-no { color: #dc2626; }
@@ -134,8 +137,14 @@
   <button id="place-cancel">Отмена</button>
 </div>
 
-<script src="config.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
+// Карта: OpenStreetMap + Leaflet (решение от 26.11.2026, см. 01_Roadmap). Раньше
+// были Яндекс Карты, перешли из-за атак на дата-центры Яндекса в октябре 2026
+// и перебоев в работе их сервисов, не хотим зависеть от одного поставщика.
+// Бесплатно, без ключа, без привязки к одной компании.
+
 // ВАЖНО про отзывы: это демо-версия без настоящего сервера и без входа.
 // Оставить отзыв или добавить туалет может любой человек без регистрации
 // (решение от 01.10.2026, см. 03_Data_Security.md). Вместо входа: капча-заглушка
@@ -414,7 +423,7 @@ document.addEventListener('click', (e) => {
 
     render();
     const newMarker = markers.find(m => String(m._toiletId) === String(id));
-    if (newMarker) newMarker.balloon.open();
+    if (newMarker) newMarker.openPopup();
   }
 });
 
@@ -687,47 +696,52 @@ function passesFilters(t) {
   return true;
 }
 
+// Отдельная цветная иконка для туалетов, добавленных пользователями (та же форма
+// капли, что у обычной метки, просто фиолетовая вместо синей), чтобы отличать
+// источник на глаз, как и раньше на Яндекс Картах.
+const violetIcon = L.icon({
+  iconUrl: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-violet.png',
+  iconRetinaUrl: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-2x-violet.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+let markerClusterGroup = null;
+
 function render() {
-  map.geoObjects.removeAll();
+  if (markerClusterGroup) map.removeLayer(markerClusterGroup);
   markers = [];
   const visible = allToilets.filter(passesFilters);
-  const placemarks = visible.map(t => {
-    const preset = t.source === 'user' ? 'islands#violetIcon' : 'islands#blueIcon';
-    const marker = new ymaps.Placemark(
-      [t.lat, t.lon],
-      { balloonContent: popupHtml(t) },
-      { preset, balloonMaxWidth: 300, hideIconOnBalloonOpen: false }
-    );
-    marker._toiletId = t.id;
-    markers.push(marker);
-    return marker;
-  });
 
   // Группировка близких туалетов в один кружок с цифрой, чтобы не накладывались
   // друг на друга визуально и не было путаницы, по какой метке реально кликаешь.
-  // Если несколько туалетов настолько близко, что не разъезжаются даже на
-  // максимальном зуме, клик по кружку покажет список, из которого можно выбрать
-  // нужный, а не откроет случайный.
-  const clusterer = new ymaps.Clusterer({
-    preset: 'islands#invertedBlueClusterIcons',
-    groupByCoordinates: false,
-    clusterDisableClickZoom: false
+  markerClusterGroup = L.markerClusterGroup();
+  visible.forEach(t => {
+    const options = t.source === 'user' ? { icon: violetIcon } : {};
+    const marker = L.marker([t.lat, t.lon], options);
+    marker._toiletId = t.id;
+    marker.bindPopup(popupHtml(t), { maxHeight: 420, maxWidth: 300 });
+    markers.push(marker);
+    markerClusterGroup.addLayer(marker);
   });
-  clusterer.add(placemarks);
-  map.geoObjects.add(clusterer);
+  map.addLayer(markerClusterGroup);
+
   document.getElementById('count').textContent = `Показано: ${visible.length} из ${allToilets.length}`;
 }
 
 function initMap() {
-  map = new ymaps.Map('map', {
-    center: [55.751, 37.618],
-    zoom: 10,
-    controls: ['zoomControl']
-  });
+  map = L.map('map').setView([55.751, 37.618], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19
+  }).addTo(map);
 
-  map.events.add('click', (e) => {
+  map.on('click', (e) => {
     if (!placingMode) return;
-    openNewToiletModal(e.get('coords'));
+    openNewToiletModal([e.latlng.lat, e.latlng.lng]);
   });
 
   document.getElementById('add-toilet-btn').addEventListener('click', togglePlacingMode);
@@ -784,16 +798,7 @@ function initMap() {
     });
 }
 
-(function loadYandexMaps() {
-  const script = document.createElement('script');
-  script.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(YANDEX_MAPS_API_KEY) + '&lang=ru_RU';
-  script.onload = () => ymaps.ready(initMap);
-  script.onerror = () => {
-    document.getElementById('map').innerHTML =
-      '<div style="padding:20px; font-family:sans-serif;">Не удалось загрузить Яндекс Карты. Проверьте интернет-соединение и ключ в config.js.</div>';
-  };
-  document.head.appendChild(script);
-})();
+initMap();
 </script>
 
 </body>
